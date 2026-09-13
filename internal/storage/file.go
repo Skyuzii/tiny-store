@@ -8,9 +8,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type FileStorage struct {
+	mu   sync.RWMutex
 	path string
 	data map[string]string
 }
@@ -45,6 +47,9 @@ func NewFileStorage(path string) (*FileStorage, error) {
 }
 
 func (s *FileStorage) Put(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if _, ok := s.data[key]; ok {
 		return ErrAlreadyExists
 	}
@@ -99,6 +104,9 @@ func (s *FileStorage) save(data map[string]string) error {
 }
 
 func (s *FileStorage) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if _, ok := s.data[key]; !ok {
 		return ErrNotFound
 	}
@@ -116,6 +124,9 @@ func (s *FileStorage) Delete(key string) error {
 }
 
 func (s *FileStorage) Get(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if value, ok := s.data[key]; ok {
 		return value, nil
 	}
@@ -124,6 +135,9 @@ func (s *FileStorage) Get(key string) (string, error) {
 }
 
 func (s *FileStorage) List() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	res := make(map[string]string, len(s.data))
 	for key, value := range s.data {
 		res[key] = value

@@ -31,12 +31,16 @@ func main() {
 		storage: store,
 	}
 
+	app.Run()
+}
+
+func (a *App) Run() {
 	commands := map[string]CommandFunc{
-		"put":  app.Put,
-		"get":  app.Get,
-		"del":  app.Delete,
-		"list": app.List,
-		"exit": app.Exit,
+		"put":  a.Put,
+		"get":  a.Get,
+		"del":  a.Delete,
+		"list": a.List,
+		"exit": a.Exit,
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -110,7 +114,7 @@ func (a *App) Delete(args []string) error {
 	return err
 }
 
-func (a *App) List(args []string) error {
+func (a *App) List([]string) error {
 	res := a.storage.List()
 
 	for key, value := range res {
@@ -120,6 +124,6 @@ func (a *App) List(args []string) error {
 	return nil
 }
 
-func (a *App) Exit(args []string) error {
+func (a *App) Exit([]string) error {
 	return ErrExit
 }
