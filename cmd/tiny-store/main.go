@@ -21,8 +21,14 @@ func main() {
 	fmt.Println("Tiny Store")
 	fmt.Println("Commands: put <key> <value>, get <key>, delete <key>, list, exit")
 
+	store, err := storage.NewFileStorage("data.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	app := &App{
-		storage: storage.NewMemoryStorage(),
+		storage: store,
 	}
 
 	commands := map[string]CommandFunc{

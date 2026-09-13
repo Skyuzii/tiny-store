@@ -2,103 +2,118 @@ package storage
 
 import (
 	"errors"
+	"maps"
 	"testing"
 )
 
-func TestMemoryStorage_PutGet(t *testing.T) {
+func TestMemoryStoragePutAndGet(t *testing.T) {
 	store := NewMemoryStorage()
 
-	err := store.Put("key", "value")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatalf("Put() error = %v, want nil", err)
 	}
 
-	v, err := store.Get("key")
+	got, err := store.Get("language")
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("Get() error = %v, want nil", err)
 	}
-
-	if v != "value" {
-		t.Errorf("unexpected value: %v", v)
+	if got != "go" {
+		t.Errorf("Get() = %q, want %q", got, "go")
 	}
 }
 
-func TestMemoryStorage_PutExistingKey(t *testing.T) {
+func TestMemoryStoragePutExistingKeyPreservesValue(t *testing.T) {
 	store := NewMemoryStorage()
-
-	err := store.Put("key", "value")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatalf("first Put() error = %v, want nil", err)
 	}
 
-	err = store.Put("key", "value2")
+	err := store.Put("language", "rust")
 	if !errors.Is(err, ErrAlreadyExists) {
-		t.Errorf("unexpected error: %v", err)
+		t.Fatalf("second Put() error = %v, want ErrAlreadyExists", err)
+	}
+
+	got, err := store.Get("language")
+	if err != nil {
+		t.Fatalf("Get() error = %v, want nil", err)
+	}
+	if got != "go" {
+		t.Errorf("Get() after rejected Put() = %q, want %q", got, "go")
 	}
 }
 
-func TestMemoryStorage_GetMissingKey(t *testing.T) {
+func TestMemoryStorageGetMissingKey(t *testing.T) {
 	store := NewMemoryStorage()
 
-	_, err := store.Get("key")
+	_, err := store.Get("missing")
 	if !errors.Is(err, ErrNotFound) {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("Get() error = %v, want ErrNotFound", err)
 	}
 }
 
-func TestMemoryStorage_Delete(t *testing.T) {
+func TestMemoryStorageDelete(t *testing.T) {
 	store := NewMemoryStorage()
-
-	err := store.Put("key", "value")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatalf("Put() error = %v, want nil", err)
 	}
 
-	_, err = store.Get("key")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err := store.Delete("language"); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
 	}
 
-	err = store.Delete("key")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = store.Get("key")
+	_, err := store.Get("language")
 	if !errors.Is(err, ErrNotFound) {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("Get() after Delete() error = %v, want ErrNotFound", err)
 	}
 }
 
-func TestNewMemoryStorage_List(t *testing.T) {
+func TestMemoryStorageDeleteMissingKey(t *testing.T) {
 	store := NewMemoryStorage()
 
-	expectedMap := map[string]string{
+	err := store.Delete("missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("Delete() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestMemoryStorageList(t *testing.T) {
+	store := NewMemoryStorage()
+	want := map[string]string{
 		"language": "go",
 		"editor":   "vim",
 	}
 
-	for key, value := range expectedMap {
+	for key, value := range want {
 		if err := store.Put(key, value); err != nil {
-			t.Fatalf("Put(%q): неожиданная ошибка: %v", key, err)
+			t.Fatalf("Put(%q, %q) error = %v, want nil", key, value, err)
 		}
 	}
 
-	got := store.List()
+	if got := store.List(); !maps.Equal(got, want) {
+		t.Errorf("List() = %v, want %v", got, want)
+	}
+}
 
-	if len(got) != len(expectedMap) {
-		t.Fatalf("List: записей = %d, ожидалось %d", len(got), len(expectedMap))
+func TestMemoryStorageListEmpty(t *testing.T) {
+	store := NewMemoryStorage()
+
+	if got := store.List(); len(got) != 0 {
+		t.Errorf("List() = %v, want empty map", got)
+	}
+}
+
+func TestMemoryStorageListReturnsCopy(t *testing.T) {
+	store := NewMemoryStorage()
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatalf("Put() error = %v, want nil", err)
 	}
 
-	for key, expectedValue := range expectedMap {
-		gotValue, exists := got[key]
-		if !exists {
-			t.Errorf("List: отсутствует ключ %q", key)
-			continue
-		}
+	result := store.List()
+	result["language"] = "rust"
+	result["editor"] = "vim"
 
-		if gotValue != expectedValue {
-			t.Errorf("List[%q] = %q, ожидалось %q", key, gotValue, expectedValue)
-		}
+	want := map[string]string{"language": "go"}
+	if got := store.List(); !maps.Equal(got, want) {
+		t.Errorf("List() after modifying returned map = %v, want %v", got, want)
 	}
 }
