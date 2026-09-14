@@ -9,6 +9,8 @@ coverage.*
 
 # Локальные данные приложения
 /data/
+data.json
+data.txt
 *.db
 *.db.tmp
 

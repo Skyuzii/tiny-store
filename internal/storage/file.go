@@ -50,57 +50,27 @@ func (s *FileStorage) Put(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data[key]; ok {
-		return ErrAlreadyExists
-	}
+	nextData := maps.Clone(s.data)
+	nextData[key] = value
 
-	newMap := maps.Clone(s.data)
-	newMap[key] = value
-
-	if err := s.save(newMap); err != nil {
+	if err := s.save(nextData); err != nil {
 		return err
 	}
 
-	s.data = newMap
+	s.data = nextData
 
 	return nil
 }
 
-func (s *FileStorage) save(data map[string]string) error {
-	contents, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("encode storage data: %w", err)
-	}
-	contents = append(contents, '\n')
+func (s *FileStorage) Get(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	dir := filepath.Dir(s.path)
-	temp, err := os.CreateTemp(dir, "."+filepath.Base(s.path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create temporary storage file: %w", err)
+	value, ok := s.data[key]
+	if !ok {
+		return "", ErrNotFound
 	}
-	tempPath := temp.Name()
-	defer func() {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
-	}()
-
-	if err := temp.Chmod(0o644); err != nil {
-		return fmt.Errorf("set storage file permissions: %w", err)
-	}
-	if _, err := temp.Write(contents); err != nil {
-		return fmt.Errorf("write storage file: %w", err)
-	}
-	if err := temp.Sync(); err != nil {
-		return fmt.Errorf("sync storage file: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close storage file: %w", err)
-	}
-	if err := os.Rename(tempPath, s.path); err != nil {
-		return fmt.Errorf("replace storage file: %w", err)
-	}
-
-	return nil
+	return value, nil
 }
 
 func (s *FileStorage) Delete(key string) error {
@@ -111,37 +81,58 @@ func (s *FileStorage) Delete(key string) error {
 		return ErrNotFound
 	}
 
-	newMap := maps.Clone(s.data)
-	delete(newMap, key)
+	nextData := maps.Clone(s.data)
+	delete(nextData, key)
 
-	if err := s.save(newMap); err != nil {
+	if err := s.save(nextData); err != nil {
 		return err
 	}
 
-	s.data = newMap
+	s.data = nextData
 
 	return nil
-}
-
-func (s *FileStorage) Get(key string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if value, ok := s.data[key]; ok {
-		return value, nil
-	}
-
-	return "", ErrNotFound
 }
 
 func (s *FileStorage) List() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	res := make(map[string]string, len(s.data))
-	for key, value := range s.data {
-		res[key] = value
+	return maps.Clone(s.data)
+}
+
+func (s *FileStorage) save(data map[string]string) error {
+	contents, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("encode storage data: %w", err)
+	}
+	contents = append(contents, '\n')
+
+	dir := filepath.Dir(s.path)
+	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(s.path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temporary storage file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+	}()
+
+	if err := tempFile.Chmod(0o644); err != nil {
+		return fmt.Errorf("set storage file permissions: %w", err)
+	}
+	if _, err := tempFile.Write(contents); err != nil {
+		return fmt.Errorf("write storage file: %w", err)
+	}
+	if err := tempFile.Sync(); err != nil {
+		return fmt.Errorf("sync storage file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("close storage file: %w", err)
+	}
+	if err := os.Rename(tempPath, s.path); err != nil {
+		return fmt.Errorf("replace storage file: %w", err)
 	}
 
-	return res
+	return nil
 }

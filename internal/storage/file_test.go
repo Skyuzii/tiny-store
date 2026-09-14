@@ -22,7 +22,7 @@ func TestNewFileStorageMissingFileCreatesEmptyStorage(t *testing.T) {
 
 func TestNewFileStorageLoadsExistingData(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.json")
-	writeTestFile(t, path, `{"language":"go","editor":"vim"}`)
+	writeTestFileStorage(t, path, `{"language":"go","editor":"vim"}`)
 
 	store, err := NewFileStorage(path)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestNewFileStorageLoadsExistingData(t *testing.T) {
 
 func TestNewFileStorageEmptyFileCreatesEmptyStorage(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.json")
-	writeTestFile(t, path, "")
+	writeTestFileStorage(t, path, "")
 
 	store, err := NewFileStorage(path)
 	if err != nil {
@@ -51,7 +51,7 @@ func TestNewFileStorageEmptyFileCreatesEmptyStorage(t *testing.T) {
 func TestNewFileStorageRejectsInvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.json")
 	const contents = `{not valid json`
-	writeTestFile(t, path, contents)
+	writeTestFileStorage(t, path, contents)
 
 	if _, err := NewFileStorage(path); err == nil {
 		t.Fatal("NewFileStorage() error = nil, want invalid JSON error")
@@ -90,7 +90,7 @@ func TestFileStoragePutPersistsData(t *testing.T) {
 	}
 }
 
-func TestFileStoragePutExistingKeyPreservesPersistedValue(t *testing.T) {
+func TestFileStoragePutExistingKeyOverwritesPersistedValue(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.json")
 	store, err := NewFileStorage(path)
 	if err != nil {
@@ -101,8 +101,8 @@ func TestFileStoragePutExistingKeyPreservesPersistedValue(t *testing.T) {
 	}
 
 	err = store.Put("language", "rust")
-	if !errors.Is(err, ErrAlreadyExists) {
-		t.Fatalf("second Put() error = %v, want ErrAlreadyExists", err)
+	if err != nil {
+		t.Fatalf("second Put() error = %v, want nil", err)
 	}
 
 	reopened, err := NewFileStorage(path)
@@ -113,14 +113,14 @@ func TestFileStoragePutExistingKeyPreservesPersistedValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() after reopen error = %v, want nil", err)
 	}
-	if got != "go" {
-		t.Errorf("Get() after rejected Put() = %q, want %q", got, "go")
+	if got != "rust" {
+		t.Errorf("Get() after overwrite = %q, want %q", got, "rust")
 	}
 }
 
 func TestFileStorageDeletePersistsData(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.json")
-	writeTestFile(t, path, `{"language":"go","editor":"vim"}`)
+	writeTestFileStorage(t, path, `{"language":"go","editor":"vim"}`)
 
 	store, err := NewFileStorage(path)
 	if err != nil {
@@ -169,9 +169,9 @@ func TestFileStorageListReturnsCopy(t *testing.T) {
 		t.Fatalf("Put() error = %v, want nil", err)
 	}
 
-	result := store.List()
-	result["language"] = "rust"
-	result["editor"] = "vim"
+	entries := store.List()
+	entries["language"] = "rust"
+	entries["editor"] = "vim"
 
 	want := map[string]string{"language": "go"}
 	if got := store.List(); !maps.Equal(got, want) {
@@ -199,10 +199,77 @@ func TestFileStorageFailedPutDoesNotChangeMemory(t *testing.T) {
 	}
 }
 
-func writeTestFile(t *testing.T, path, contents string) {
+func writeTestFileStorage(t *testing.T, path, contents string) {
 	t.Helper()
 
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write test file: %v", err)
+	}
+}
+
+func TestFileStorageFailedDeleteDoesNotChangeMemory(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.json")
+	store, err := NewFileStorage(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete("language"); err == nil {
+		t.Fatal("expected persistence error")
+	}
+	if value, err := store.Get("language"); err != nil || value != "go" {
+		t.Fatalf("Get() after failed Delete = %q, %v", value, err)
+	}
+}
+
+func TestNewFileStorageAcceptsBlankAndNull(t *testing.T) {
+	for _, contents := range []string{" \n\t", "null"} {
+		t.Run(contents, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "data.json")
+			writeTestFileStorage(t, path, contents)
+			store, err := NewFileStorage(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entries := store.List(); len(entries) != 0 {
+				t.Fatalf("List() = %v, want empty", entries)
+			}
+			if err := store.Put("", ""); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := NewFileStorage(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if value, err := reopened.Get(""); err != nil || value != "" {
+				t.Fatalf("Get(empty) after reopen = %q, %v", value, err)
+			}
+		})
+	}
+}
+
+func TestFileStorageFailedOverwritePreservesValue(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewFileStorage(filepath.Join(dir, "data.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put("language", "go"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put("language", "rust"); err == nil {
+		t.Fatal("Put() error = nil, want persistence error")
+	}
+	if value, err := store.Get("language"); err != nil || value != "go" {
+		t.Fatalf("Get() after failed overwrite = %q, %v, want go, nil", value, err)
 	}
 }

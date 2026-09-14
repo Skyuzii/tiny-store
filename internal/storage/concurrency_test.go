@@ -50,8 +50,10 @@ func testConcurrentAccess(t *testing.T, store Storage) {
 				return
 			}
 
-			if _, err := store.Get(key); err != nil {
+			if value, err := store.Get(key); err != nil {
 				errorsCh <- fmt.Errorf("Get(%q): %w", key, err)
+			} else if value != "value" {
+				errorsCh <- fmt.Errorf("Get(%q) = %q, want value", key, value)
 			}
 
 			store.List()

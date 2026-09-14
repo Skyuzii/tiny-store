@@ -1,12 +1,9 @@
 package storage
 
 import (
-	"errors"
+	"maps"
 	"sync"
 )
-
-var ErrNotFound = errors.New("key not found")
-var ErrAlreadyExists = errors.New("key already exists")
 
 type MemoryStorage struct {
 	mu   sync.RWMutex
@@ -23,10 +20,6 @@ func (s *MemoryStorage) Put(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data[key]; ok {
-		return ErrAlreadyExists
-	}
-
 	s.data[key] = value
 	return nil
 }
@@ -35,19 +28,18 @@ func (s *MemoryStorage) Get(key string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	v, ok := s.data[key]
+	value, ok := s.data[key]
 	if !ok {
 		return "", ErrNotFound
 	}
-	return v, nil
+	return value, nil
 }
 
 func (s *MemoryStorage) Delete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, ok := s.data[key]
-	if !ok {
+	if _, ok := s.data[key]; !ok {
 		return ErrNotFound
 	}
 
@@ -59,11 +51,5 @@ func (s *MemoryStorage) List() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make(map[string]string, len(s.data))
-
-	for key, value := range s.data {
-		result[key] = value
-	}
-
-	return result
+	return maps.Clone(s.data)
 }
