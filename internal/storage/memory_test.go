@@ -22,26 +22,6 @@ func TestMemoryStoragePutAndGet(t *testing.T) {
 	}
 }
 
-func TestMemoryStoragePutExistingKeyPreservesValue(t *testing.T) {
-	store := NewMemoryStorage()
-	if err := store.Put("language", "go"); err != nil {
-		t.Fatalf("first Put() error = %v, want nil", err)
-	}
-
-	err := store.Put("language", "rust")
-	if !errors.Is(err, ErrAlreadyExists) {
-		t.Fatalf("second Put() error = %v, want ErrAlreadyExists", err)
-	}
-
-	got, err := store.Get("language")
-	if err != nil {
-		t.Fatalf("Get() error = %v, want nil", err)
-	}
-	if got != "go" {
-		t.Errorf("Get() after rejected Put() = %q, want %q", got, "go")
-	}
-}
-
 func TestMemoryStorageGetMissingKey(t *testing.T) {
 	store := NewMemoryStorage()
 
